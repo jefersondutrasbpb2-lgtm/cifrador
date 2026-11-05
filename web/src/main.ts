@@ -10,6 +10,7 @@ import type { Detection, Segment } from './audio/detect';
 import { ANALYSIS_RATE, analyzeInWorker, decodeFile, toAnalysisSamples } from './audio/decode';
 import { synthDemo, wavBlob } from './audio/demo';
 import { songs, saveSongs, store, type Song } from './storage';
+import { clampSize, columnWidth, fitFontSize, touchDistance } from './layout';
 import { apiHealth, runJob, type ApiResult } from './api';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -20,6 +21,7 @@ const src = $<HTMLTextAreaElement>('src');
 const S = {
   semis: 0, inst: 'guitar' as 'guitar' | 'keys', capo: 0, acc: 'auto' as 'auto' | 's' | 'b',
   size: 17, voice: {} as Record<string, number>, editor: true, songId: null as string | null,
+  fit: false, cols: 'auto' as 'auto' | '1' | '2', stage: false, diag: true,
 };
 let origKey: Key | null = null;
 
@@ -49,7 +51,7 @@ function renderSheet() {
   const sk = shifted(origKey, S.semis), shk = shifted(origKey, curShift()), flats = useFlats(shk), shift = curShift();
   $('shTitle').textContent = $<HTMLInputElement>('songTitle').value || parsed.meta.title || 'Sem título';
   $('shSub').textContent = $<HTMLInputElement>('songArtist').value || parsed.meta.artist || '';
-  $('keyBox').textContent = keyLabel(sk, useFlats(sk));
+  $('keyBox').textContent = $('sKey').textContent = keyLabel(sk, useFlats(sk));
 
   let kl = '';
   if (origKey) {
@@ -64,18 +66,20 @@ function renderSheet() {
   if (ap) ap.onclick = () => { S.capo = Number(ap.dataset.c); $<HTMLSelectElement>('capoSel').value = String(S.capo); renderSheet(); };
 
   const seen: string[] = [];
-  let html = '';
+  let html = '', blk = '';
+  const flush = () => { if (blk) html += `<div class="blk">${blk}</div>`; blk = ''; };
   for (const l of parsed.lines) {
-    if (l.kind === 'blank') { if (html) html += '<div class="gap"></div>'; continue; }
-    if (l.kind === 'sec') { html += `<div class="ln sec">${esc(l.text)}</div>`; continue; }
-    if (l.kind === 'lyr') { html += `<div class="ln lyr">${esc(l.text)}</div>`; continue; }
+    if (l.kind === 'blank') { if (blk) { flush(); } continue; }
+    if (l.kind === 'sec') { flush(); blk += `<div class="ln sec">${esc(l.text)}</div>`; continue; }
+    if (l.kind === 'lyr') { blk += `<div class="ln lyr">${esc(l.text)}</div>`; continue; }
     const parts = layoutChordLine(l.toks, shift, flats);
-    html += '<div class="ln chords">' + parts.map((p) => {
+    blk += '<div class="ln chords">' + parts.map((p) => {
       if (!p.chord) return esc(p.text);
       if (!seen.includes(p.chord)) seen.push(p.chord);
       return `<b class="ch" data-c="${esc(p.chord)}">${esc(p.chord)}</b>`;
     }).join('') + '</div>';
   }
+  flush();
   $('sheet').innerHTML = html || '<p class="empty">Cole ou escreva uma cifra no editor para ela aparecer aqui.</p>';
 
   $('diagrams').innerHTML = seen.map((nm) => {
@@ -85,6 +89,7 @@ function renderSheet() {
     const cyc = n > 1 ? `<div class="cyc"><button data-d="-1" aria-label="Posição anterior de ${esc(nm)}">‹</button>${Math.min(idx, n - 1) + 1}/${n}<button data-d="1" aria-label="Próxima posição de ${esc(nm)}">›</button></div>` : '';
     return `<div class="dcard" data-c="${esc(nm)}"><div class="nm">${esc(nm)}</div>${diagramFor(nm, flats, idx)}${cyc}</div>`;
   }).join('');
+  applyLayout();
   store.set('draft', { text, title: $<HTMLInputElement>('songTitle').value, artist: $<HTMLInputElement>('songArtist').value, id: S.songId });
 }
 
@@ -128,13 +133,152 @@ function setInst(i: typeof S.inst) {
 $('instGuitar').onclick = () => setInst('guitar');
 $('instKeys').onclick = () => setInst('keys');
 
-function setSize(v: number) {
-  S.size = Math.max(12, Math.min(30, v));
+/* ---------------- tamanho, colunas e tela cheia ---------------- */
+const sheetEl = $('sheet');
+const sizeRange = $<HTMLInputElement>('sizeRange');
+const landscape = window.matchMedia('(orientation: landscape) and (min-width: 700px)');
+
+function setSize(v: number, manual = true) {
+  S.size = clampSize(v);
+  if (manual) setFit(false);
   document.documentElement.style.setProperty('--sheet-size', S.size + 'px');
+  sizeRange.value = String(S.size);
   store.set('size', S.size);
+  if (manual) applyLayout();
 }
-$('fUp').onclick = () => setSize(S.size + 1);
-$('fDown').onclick = () => setSize(S.size - 1);
+function setFit(on: boolean) {
+  S.fit = on;
+  for (const id of ['fitBtn', 'sFit']) $(id).setAttribute('aria-pressed', String(on));
+  store.set('fit', on);
+  applyLayout();
+}
+/** Mede a linha mais comprida e a largura útil da folha. */
+function measure(): { maxChars: number; ratio: number; inner: number } | null {
+  const lines = [...sheetEl.querySelectorAll<HTMLElement>('.ln.chords, .ln.lyr')];
+  if (!lines.length) return null;
+  const maxChars = Math.max(...lines.map((l) => (l.textContent || '').replace(/\s+$/, '').length));
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:inherit';
+  probe.textContent = 'M'.repeat(40);
+  sheetEl.appendChild(probe);
+  const ratio = probe.getBoundingClientRect().width / 40 / S.size;
+  probe.remove();
+  const cs = getComputedStyle(sheetEl);
+  const inner = sheetEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  return { maxChars, ratio, inner };
+}
+const GAP = 40, MIN_TWO_COL_SIZE = 14;
+
+/** Automático: 2 colunas só com a tela deitada e se a cifra couber sem cortar. */
+function decideCols(m: ReturnType<typeof measure>): boolean {
+  if (S.cols === '1') return false;
+  if (S.cols === '2') return true;
+  if (!landscape.matches || !m) return false;
+  const colW = columnWidth(m.inner, 2, GAP) - 2;
+  if (S.fit) return fitFontSize(m.maxChars, colW, m.ratio) >= MIN_TWO_COL_SIZE;
+  return m.maxChars * m.ratio * S.size <= colW;
+}
+function applyLayout() {
+  const m = measure();
+  const two = decideCols(m);
+  sheetEl.classList.toggle('cols2', two);
+  $('sCols').textContent = 'Colunas: ' + (S.cols === 'auto' ? 'auto' : S.cols);
+  if (S.fit && m) setSize(fitFontSize(m.maxChars, (two ? columnWidth(m.inner, 2, GAP) : m.inner) - 2, m.ratio), false);
+}
+function setCols(v: typeof S.cols) {
+  S.cols = v;
+  $<HTMLSelectElement>('colSel').value = v;
+  store.set('cols', v);
+  applyLayout();
+}
+
+$('fUp').onclick = $('sFUp').onclick = () => setSize(S.size + 1);
+$('fDown').onclick = $('sFDown').onclick = () => setSize(S.size - 1);
+sizeRange.oninput = () => setSize(Number(sizeRange.value));
+$('fitBtn').onclick = $('sFit').onclick = () => setFit(!S.fit);
+$<HTMLSelectElement>('colSel').onchange = (e) => setCols((e.target as HTMLSelectElement).value as typeof S.cols);
+$('sCols').onclick = () => setCols(S.cols === 'auto' ? '1' : S.cols === '1' ? '2' : 'auto');
+let relayout = 0;
+const onResize = () => { clearTimeout(relayout); relayout = window.setTimeout(applyLayout, 150); };
+window.addEventListener('resize', onResize);
+landscape.addEventListener('change', onResize);
+
+/* pinça com dois dedos muda o tamanho da letra */
+let pinch: { d: number; size: number } | null = null;
+sheetEl.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) pinch = { d: touchDistance(e.touches[0], e.touches[1]), size: S.size };
+}, { passive: true });
+sheetEl.addEventListener('touchmove', (e) => {
+  if (!pinch || e.touches.length !== 2) return;
+  e.preventDefault();
+  const d = touchDistance(e.touches[0], e.touches[1]);
+  const next = clampSize(pinch.size * (d / pinch.d));
+  if (next !== S.size) setSize(next);
+}, { passive: false });
+sheetEl.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+
+/* tela cheia (modo palco) */
+function toast(msg: string) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  window.setTimeout(() => { if (t.textContent === msg) t.hidden = true; }, 5000);
+}
+let dimTimer = 0;
+function wakeBar() {
+  const bar = $('stageBar');
+  bar.classList.remove('dim');
+  clearTimeout(dimTimer);
+  if (S.stage) dimTimer = window.setTimeout(() => bar.classList.add('dim'), 4000);
+}
+type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<void> };
+async function setOrientation(v: string) {
+  const so = screen.orientation as LockableOrientation | undefined;
+  if (v === 'free') { try { so?.unlock(); } catch { /* nada a destravar */ } return; }
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    if (!so?.lock) throw new Error('sem trava');
+    await so.lock(v);
+  } catch {
+    $<HTMLSelectElement>('sOrient').value = 'free';
+    toast('Este aparelho não deixa o site travar a tela. Gire o aparelho na posição que quiser. No iPhone, desligue a "Trava de rotação" na Central de Controle.');
+  }
+}
+async function enterStage() {
+  S.stage = true;
+  document.body.classList.add('stage');
+  document.body.classList.toggle('no-diagrams', !S.diag);
+  $('stageBar').hidden = false;
+  showTab('cifra');
+  wakeBar();
+  try { await document.documentElement.requestFullscreen?.(); } catch { /* segue sem tela cheia */ }
+  try { wake = wake ?? (await navigator.wakeLock?.request('screen')) ?? null; } catch { /* sem wake lock */ }
+  window.scrollTo(0, 0);
+  applyLayout();
+}
+function exitStage() {
+  S.stage = false;
+  document.body.classList.remove('stage', 'no-diagrams');
+  $('stageBar').hidden = true;
+  $<HTMLSelectElement>('sOrient').value = 'free';
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (!scrolling) { wake?.release().catch(() => {}); wake = null; }
+  applyLayout();
+}
+$('stageBtn').onclick = enterStage;
+$('sExit').onclick = exitStage;
+$('sTUp').onclick = () => $('tUp').click();
+$('sTDown').onclick = () => $('tDown').click();
+$('sDiag').onclick = () => {
+  S.diag = !S.diag;
+  $('sDiag').setAttribute('aria-pressed', String(S.diag));
+  document.body.classList.toggle('no-diagrams', !S.diag);
+  store.set('diag', S.diag);
+  applyLayout();
+};
+$<HTMLSelectElement>('sOrient').onchange = (e) => setOrientation((e.target as HTMLSelectElement).value);
+for (const ev of ['pointerdown', 'pointermove', 'touchstart']) document.addEventListener(ev, () => { if (S.stage) wakeBar(); }, { passive: true });
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) $<HTMLSelectElement>('sOrient').value = 'free'; });
 
 function setEditor(on: boolean) {
   S.editor = on;
@@ -161,16 +305,18 @@ function scrollLoop(t: number) {
 }
 async function toggleScroll(on: boolean) {
   scrolling = on;
-  const b = $('scrollBtn');
-  b.setAttribute('aria-pressed', String(on));
-  b.textContent = on ? '❚❚ Pausar' : '▶ Rolar';
+  for (const id of ['scrollBtn', 'sScroll']) {
+    const b = $(id);
+    b.setAttribute('aria-pressed', String(on));
+    b.textContent = on ? '❚❚ Pausar' : '▶ Rolar';
+  }
   if (on) {
     lastT = 0;
     requestAnimationFrame(scrollLoop);
     try { wake = (await navigator.wakeLock?.request('screen')) ?? null; } catch { /* sem wake lock */ }
-  } else { wake?.release().catch(() => {}); wake = null; }
+  } else if (!S.stage) { wake?.release().catch(() => {}); wake = null; }
 }
-$('scrollBtn').onclick = () => toggleScroll(!scrolling);
+$('scrollBtn').onclick = $('sScroll').onclick = () => toggleScroll(!scrolling);
 
 /* editor */
 function edMsg(t: string) {
@@ -457,7 +603,13 @@ $('ytGo').onclick = async () => {
     $<HTMLInputElement>('songArtist').value = draft.artist || '';
     S.songId = draft.id || null;
   } else src.value = SAMPLE;
-  setSize(store.get('size', 17));
+  setSize(store.get('size', 17), false);
+  S.cols = store.get<typeof S.cols>('cols', 'auto');
+  $<HTMLSelectElement>('colSel').value = S.cols;
+  S.diag = store.get('diag', true);
+  $('sDiag').setAttribute('aria-pressed', String(S.diag));
+  S.fit = store.get('fit', true);
+  for (const id of ['fitBtn', 'sFit']) $(id).setAttribute('aria-pressed', String(S.fit));
   S.inst = store.get<typeof S.inst>('inst', 'guitar');
   $('instGuitar').setAttribute('aria-pressed', String(S.inst === 'guitar'));
   $('instKeys').setAttribute('aria-pressed', String(S.inst === 'keys'));

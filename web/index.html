@@ -49,15 +49,21 @@
     <div class="grp"><label class="lbl" for="accSel">Acidentes</label>
       <select id="accSel"><option value="auto">Automático</option><option value="s">Sustenidos ♯</option><option value="b">Bemóis ♭</option></select>
     </div>
-    <div class="grp"><span class="lbl">Letra</span>
+    <div class="grp"><span class="lbl">Tamanho</span>
       <button class="btn sq" id="fDown" aria-label="Diminuir letra">A−</button>
+      <input type="range" id="sizeRange" min="10" max="44" value="17" aria-label="Tamanho da letra">
       <button class="btn sq" id="fUp" aria-label="Aumentar letra">A+</button>
+      <button class="btn" id="fitBtn" aria-pressed="false" title="Deixa a letra do maior tamanho que cabe na largura da tela">Ajustar à tela</button>
+    </div>
+    <div class="grp"><label class="lbl" for="colSel">Colunas</label>
+      <select id="colSel"><option value="auto">Automático</option><option value="1">1 coluna</option><option value="2">2 colunas</option></select>
     </div>
     <div class="grp"><span class="lbl">Rolagem</span>
       <button class="btn" id="scrollBtn" aria-pressed="false">▶ Rolar</button>
       <input type="range" id="scrollSpeed" min="1" max="10" value="3" aria-label="Velocidade da rolagem">
     </div>
     <button class="btn" id="editorBtn" aria-pressed="true">Editor</button>
+    <button class="btn primary" id="stageBtn">Tela cheia</button>
   </div></div>
 
   <div class="wrap cifra-grid" id="cifraGrid">
@@ -86,6 +92,15 @@
       <div class="sheet" id="sheet"></div>
     </div>
   </div>
+
+  <div class="stagebar" id="stageBar" role="toolbar" aria-label="Controles da tela cheia" hidden>
+    <div class="grp"><button class="btn sq" id="sTDown" aria-label="Meio tom abaixo">−</button><span class="keybox" id="sKey">G</span><button class="btn sq" id="sTUp" aria-label="Meio tom acima">+</button></div>
+    <div class="grp"><button class="btn sq" id="sFDown" aria-label="Diminuir letra">A−</button><button class="btn sq" id="sFUp" aria-label="Aumentar letra">A+</button><button class="btn" id="sFit" aria-pressed="false">Ajustar</button></div>
+    <div class="grp"><button class="btn" id="sCols">Colunas: auto</button><button class="btn" id="sDiag" aria-pressed="true">Desenhos</button>
+      <select id="sOrient" aria-label="Posição da tela"><option value="free">Tela: livre</option><option value="portrait">Tela: em pé</option><option value="landscape">Tela: deitada</option></select></div>
+    <div class="grp"><button class="btn" id="sScroll" aria-pressed="false">▶ Rolar</button><button class="btn primary" id="sExit">Sair</button></div>
+  </div>
+  <div class="toast" id="toast" role="status" hidden></div>
 </section>
 
 <!-- ============ ÁUDIO ============ -->
