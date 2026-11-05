@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cifrador</title>
+<meta name="description" content="Monte cifras para violão e teclado: cole uma cifra, transponha, use capotraste ou tire os acordes de um áudio ou vídeo.">
+<meta name="theme-color" content="#2343CF">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <svg viewBox="0 0 28 28" aria-hidden="true"><rect x="3" y="3" width="22" height="22" rx="5" fill="var(--chord)"/><g stroke="var(--surface)" stroke-width="1.4"><line x1="9" y1="8" x2="9" y2="21"/><line x1="14" y1="8" x2="14" y2="21"/><line x1="19" y1="8" x2="19" y2="21"/><line x1="8" y1="12.5" x2="20" y2="12.5"/><line x1="8" y1="17" x2="20" y2="17"/></g><circle cx="14" cy="14.8" r="2.2" fill="var(--hot)"/></svg>
+      <span>Cifrador</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Seções">
+      <button role="tab" data-tab="cifra" aria-selected="true" id="tabbtn-cifra">Cifra</button>
+      <button role="tab" data-tab="audio" aria-selected="false" id="tabbtn-audio">Do áudio ou vídeo</button>
+      <button role="tab" data-tab="lib" aria-selected="false" id="tabbtn-lib">Biblioteca</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ CIFRA ============ -->
+<section id="tab-cifra" class="view">
+  <div class="toolbar"><div class="wrap toolbar-in">
+    <div class="grp"><span class="lbl">Tom</span>
+      <button class="btn sq" id="tDown" aria-label="Meio tom abaixo">−</button>
+      <span class="keybox" id="keyBox">G</span>
+      <button class="btn sq" id="tUp" aria-label="Meio tom acima">+</button>
+      <button class="btn ghost" id="tReset">Original</button>
+    </div>
+    <div class="grp"><span class="lbl">Instrumento</span>
+      <div class="seg" role="group" aria-label="Instrumento">
+        <button id="instGuitar" aria-pressed="true">Violão</button>
+        <button id="instKeys" aria-pressed="false">Teclado</button>
+      </div>
+    </div>
+    <div class="grp" id="capoGrp"><label class="lbl" for="capoSel">Capo</label>
+      <select id="capoSel"></select>
+    </div>
+    <div class="grp"><label class="lbl" for="accSel">Acidentes</label>
+      <select id="accSel"><option value="auto">Automático</option><option value="s">Sustenidos ♯</option><option value="b">Bemóis ♭</option></select>
+    </div>
+    <div class="grp"><span class="lbl">Letra</span>
+      <button class="btn sq" id="fDown" aria-label="Diminuir letra">A−</button>
+      <button class="btn sq" id="fUp" aria-label="Aumentar letra">A+</button>
+    </div>
+    <div class="grp"><span class="lbl">Rolagem</span>
+      <button class="btn" id="scrollBtn" aria-pressed="false">▶ Rolar</button>
+      <input type="range" id="scrollSpeed" min="1" max="10" value="3" aria-label="Velocidade da rolagem">
+    </div>
+    <button class="btn" id="editorBtn" aria-pressed="true">Editor</button>
+  </div></div>
+
+  <div class="wrap cifra-grid" id="cifraGrid">
+    <aside class="editor" aria-label="Editor de cifra">
+      <div class="row">
+        <input type="text" id="songTitle" placeholder="Nome da música" aria-label="Nome da música">
+        <input type="text" id="songArtist" placeholder="Artista" aria-label="Artista">
+      </div>
+      <textarea id="src" spellcheck="false" aria-label="Texto da cifra"></textarea>
+      <div class="row">
+        <button class="btn primary" id="saveBtn">Salvar na biblioteca</button>
+        <label class="btn" for="importFile">Abrir arquivo</label>
+        <input type="file" id="importFile" accept=".txt,.cho,.chopro,.chordpro,.pro,.crd,text/plain" hidden>
+        <button class="btn" id="copyBtn">Copiar texto</button>
+        <button class="btn" id="copyTrBtn" title="Copia o texto já no tom escolhido">Copiar no tom atual</button>
+        <button class="btn ghost" id="newBtn">Nova cifra</button>
+      </div>
+      <p class="status" id="edStatus" aria-live="polite"></p>
+      <p class="hint">Cole a cifra de qualquer site (acordes na linha de cima, letra embaixo) ou use ChordPro: <code>[G]O café na [D]mesa</code>. Seções como <code>[Refrão]</code> viram títulos. Funcionam notações como <code>G7M</code>, <code>Am7(b5)</code>, <code>C7(9)</code>, <code>D/F#</code>, <code>B°</code>.</p>
+    </aside>
+
+    <div class="sheet-col">
+      <div class="songhead"><h1 id="shTitle">Sem título</h1><div class="sub" id="shSub"></div></div>
+      <div class="keyline" id="keyLine"></div>
+      <div class="diagrams" id="diagrams" aria-label="Desenhos dos acordes"></div>
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ÁUDIO ============ -->
+<section id="tab-audio" class="view" hidden>
+  <div class="wrap audio-grid">
+    <div class="panel">
+      <h2>Tirar acordes de um áudio ou vídeo</h2>
+      <label class="drop" id="drop" for="mediaFile">
+        <strong>Escolha um arquivo</strong>
+        <span class="hint">mp4, webm, mov, mp3, m4a, wav ou ogg. Pode arrastar e soltar aqui.</span>
+        <span class="btn primary">Selecionar arquivo</span>
+      </label>
+      <input type="file" id="mediaFile" accept="audio/*,video/*" hidden>
+      <div class="row"><button class="btn" id="demoBtn">Testar com áudio de exemplo</button><span class="hint">gera G · D · Em · C sintetizados</span></div>
+      <div class="opts">
+        <label><input type="checkbox" id="optSev"> Tentar identificar sétimas (7, m7, 7M)</label>
+        <label for="optSens">Trocas de acorde
+          <select id="optSens"><option value="0.32">Poucas (balada)</option><option value="0.2" selected>Normal</option><option value="0.11">Muitas (rápido)</option></select>
+        </label>
+      </div>
+      <div class="progress" aria-hidden="true"><i id="prog"></i></div>
+      <div class="status" id="auStatus" aria-live="polite">Nenhum arquivo analisado ainda.</div>
+      <h3>Como funciona</h3>
+      <ol class="steps">
+        <li>O áudio é lido aqui no seu navegador. Nada é enviado para servidor.</li>
+        <li>O espectro é convertido em 12 notas (cromagrama) a cada 0,19 s.</li>
+        <li>Cada trecho é comparado com os 24 acordes maiores e menores, com peso para o baixo e para o tom estimado.</li>
+        <li>Revise e corrija os acordes ouvindo junto. Depois envie para a cifra e escreva a letra.</li>
+      </ol>
+
+      <div class="server">
+        <h3>Servidor de análise (opcional)</h3>
+        <p class="hint">Com o servidor da pasta <code>api/</code> rodando, dá para colar link do YouTube, separar os instrumentos e transcrever a letra já com os acordes em cima.</p>
+        <div class="row"><input type="url" id="apiUrl" placeholder="http://localhost:8000" aria-label="Endereço do servidor"><button class="btn" id="apiConnect">Conectar</button></div>
+        <div class="feat" id="apiFeat"></div>
+        <div id="apiBox" hidden>
+          <div class="opts">
+            <label><input type="checkbox" id="apiUse" checked> Analisar arquivos no servidor (mais preciso)</label>
+            <label><input type="checkbox" id="apiLyrics" checked> Transcrever a letra e posicionar os acordes</label>
+            <label><input type="checkbox" id="apiSeparate"> Separar instrumentos antes (mais lento)</label>
+          </div>
+          <div class="row" style="margin-top:10px"><input type="text" id="ytUrl" placeholder="Link do YouTube" aria-label="Link do YouTube"><button class="btn primary" id="ytGo">Analisar link</button></div>
+        </div>
+      </div>
+      <p class="hint">Sem servidor, links do YouTube não funcionam: o navegador não consegue baixar o áudio. Use um arquivo do aparelho.</p>
+    </div>
+
+    <div class="panel" id="resultPanel">
+      <h2 id="resTitle">Resultado</h2>
+      <div class="media" id="media"><p class="empty">Quando você escolher um arquivo, o player aparece aqui com o acorde atual em destaque.</p></div>
+      <div class="now" id="nowBox" hidden>
+        <div id="nowDiag"></div>
+        <div><div class="big" id="nowChord">–</div><div class="nx">Próximo: <b id="nextChord">–</b></div><div class="bar"><i id="nowBar"></i></div></div>
+      </div>
+      <div class="row" id="resActions" hidden>
+        <span class="pill" id="resKey"></span>
+        <button class="btn" id="editChips" aria-pressed="false">Corrigir acordes</button>
+        <button class="btn primary" id="toSheet">Enviar para a cifra</button>
+        <button class="btn primary" id="openFull" hidden>Abrir cifra com letra</button>
+      </div>
+      <p class="hint" id="editHint" hidden>Toque em um acorde para trocar o nome. Deixe vazio para apagar.</p>
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BIBLIOTECA ============ -->
+<section id="tab-lib" class="view" hidden>
+  <div class="wrap lib">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="font-family:var(--display);font-weight:800;margin:0;font-size:24px">Suas cifras</h2>
+      <span class="hint">Ficam salvas só neste navegador. Use “Copiar texto” para guardar fora.</span>
+    </div>
+    <div class="libgrid" id="libGrid"></div>
+  </div>
+</section>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

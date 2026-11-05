@@ -1,0 +1,11 @@
+{
+  "name": "Cifrador",
+  "short_name": "Cifrador",
+  "description": "Cifras para violão e teclado, com tom, capotraste, desenhos dos acordes e acordes tirados do áudio.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F5F6FA",
+  "theme_color": "#2343CF",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

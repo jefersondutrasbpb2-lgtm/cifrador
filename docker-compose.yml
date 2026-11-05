@@ -1,0 +1,15 @@
+# Sobe o servidor completo (acordes + YouTube + letra + separação) em http://localhost:8000
+services:
+  api:
+    build:
+      context: ./api
+      args:
+        FULL: "1"
+    ports:
+      - "8000:8000"
+    environment:
+      CIFRADOR_WHISPER_MODEL: small   # tiny | base | small | medium | large-v3
+    volumes:
+      - models:/root/.cache          # guarda os modelos baixados entre reinícios
+volumes:
+  models:

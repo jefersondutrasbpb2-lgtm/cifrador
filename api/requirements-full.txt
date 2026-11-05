@@ -1,0 +1,5 @@
+# Tudo: link do YouTube, letra com Whisper e separação de instrumentos com Demucs.
+-r requirements.txt
+yt-dlp>=2024.8.6
+faster-whisper>=1.0
+demucs>=4.0
